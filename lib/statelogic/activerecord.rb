@@ -40,6 +40,8 @@ module Statelogic
       end
 
       class ConfigHelper
+        attr_reader :config
+
         def initialize(cl, config)
           @class, @config = cl, config
         end
@@ -56,6 +58,7 @@ module Statelogic
           @class.class_eval do
             define_method("#{name}?") { send(attr) == name }
             define_method("was_#{name}?") { send(attr_was) == name }
+            named_scope :in_state, lambda { |state| { :conditions => { :state => state } } }
           end
 
           StateScopeHelper.new(@class, name, @config).instance_eval(&block) if block_given?
@@ -71,7 +74,11 @@ module Statelogic
 
         options[:states], options[:initial] = [], Array(options[:initial])
 
-        ConfigHelper.new(self, options).instance_eval(&block)
+        helper = ConfigHelper.new(self, options)
+        helper.instance_eval(&block)
+        helper.config[:states].each do |state|
+          named_scope(('state_is_'+ state).to_sym, :conditions => { :state => state })
+        end
 
         initial = [options[:initial], options[:states]].find(&:present?)
         validates_inclusion_of attr, :in => initial, :on => :create if initial
